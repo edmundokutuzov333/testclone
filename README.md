@@ -19,8 +19,11 @@ Build de produção: **npm run build**. Testes: **npm test**.
 - Catálogo com temas de Travis Scott, Matuê, Laylizzy e Dygo Boy.
 - Leitor oficial do Spotify através da iFrame Embed API.
 - Pesquisa por música, artista e álbum, incluindo pesquisa sem acentos.
-- Favoritos, histórico, criação de playlists e seguimento de artistas.
-- Leitor flutuante, fila, atalhos de teclado e definições.
+- Favoritos, histórico e artistas seguidos, guardados localmente com validação dos dados recuperados.
+- Criação, edição e eliminação de playlists pessoais; uma faixa já existente não é adicionada de novo por engano.
+- Fila persistente com adicionar à fila, reproduzir a seguir, mover, remover e limpar próximas faixas.
+- Pesquisa sem distinção entre maiúsculas e minúsculas nem acentos, tanto no catálogo como na biblioteca.
+- Leitor flutuante, atalhos de teclado e definições persistentes.
 - Identidade visual própria, capas de catálogo, layouts adaptáveis e animações com suporte a preferência por movimento reduzido.
 - Pipeline GitHub Actions com testes de domínio e build de produção.
 
@@ -42,4 +45,4 @@ As imagens apontam para o CDN de capas do Spotify. O Kufy não reivindica os dir
 - src/domain/music.test.ts: testes de domínio e contrato do catálogo.
 - .github/workflows/ci.yml: instalação, testes e build.
 
-As colecções e preferências do utilizador continuam locais neste protótipo. Autenticação real, sincronização na nuvem, letras licenciadas, pagamentos, subscrições, downloads offline e recomendações de produção ainda exigem serviços de backend.
+As colecções, a fila, o nome de perfil de demonstração e as preferências continuam locais neste protótipo e não sincronizam entre dispositivos. A aplicação começa sem favoritos ou histórico pré-preenchidos. Autenticação real, sincronização na nuvem, letras licenciadas, pagamentos, subscrições, downloads offline e recomendações de produção ainda exigem serviços de backend.

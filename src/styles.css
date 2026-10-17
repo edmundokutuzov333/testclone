@@ -1043,3 +1043,31 @@ input[type="range"] { background: linear-gradient(to right,#f23851 var(--range-p
   .spotify-track-heading h2 { font-size: 15px; }
   .toast { right: 12px; bottom: 154px; }
 }
+
+
+/* Queue management and actionable track menus. */
+.track-menu-heading { display: flex; align-items: center; gap: 13px; min-width: 0; margin-bottom: 19px; }
+.track-menu-heading > .cover-art { width: 62px; height: 62px; flex: 0 0 62px; border-radius: 5px; }
+.track-menu-heading > div:last-child { min-width: 0; }
+.track-menu-heading h2 { margin: 4px 0; font-size: 17px; overflow-wrap: anywhere; }
+.track-menu-heading p { color: #a99ba1; margin: 0; font-size: 11px; }
+.track-menu-actions { display: grid; gap: 7px; }
+.track-menu-actions .button { display: flex; align-items: center; justify-content: flex-start; gap: 11px; width: 100%; min-height: 43px; text-align: left; font-size: 11px; }
+.track-menu-actions .button svg { flex: 0 0 auto; color: #ff6479; }
+.queue-list { max-height: min(360px, 42vh); overflow-y: auto; overflow-x: hidden; }
+.queue-item { display: flex; align-items: center; gap: 4px; min-width: 0; border-radius: 5px; }
+.queue-item:hover { background: rgba(255,255,255,.035); }
+.queue-track-button { flex: 1 1 auto; min-width: 0; width: auto; border: 0; background: transparent; }
+.queue-item-actions { display: flex; align-items: center; gap: 0; flex: 0 0 auto; padding-right: 4px; }
+.queue-item-actions .icon-button { width: 27px; height: 30px; color: #a99ba1; }
+.queue-item-actions .icon-button:hover { background: rgba(255,255,255,.08); color: white; }
+.queue-footer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.queue-footer-actions .button { white-space: normal; min-height: 38px; padding: 8px 10px; }
+.queue-now { border: 1px solid rgba(242,56,81,.18); background: rgba(242,56,81,.055); }
+.track-empty { color: #a79aa0; padding: 22px 8px; text-align: center; font-size: 12px; }
+@media (max-width: 680px) {
+  .queue-item { gap: 0; }
+  .queue-item-actions .icon-button { width: 25px; }
+  .queue-footer-actions { grid-template-columns: 1fr; }
+  .track-menu-actions .button { min-height: 41px; }
+}

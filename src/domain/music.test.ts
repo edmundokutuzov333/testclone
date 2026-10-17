@@ -32,3 +32,41 @@ describe("music domain", () => {
     expect(toggleId(["t02"], "t03")).toEqual(["t03", "t02"]);
   });
 });
+
+describe("resilient local state and queue operations", () => {
+  it("drops unknown and duplicate IDs when restoring persisted lists", async () => {
+    const { sanitizeIds } = await import("./music");
+    expect(sanitizeIds(["t02", "missing", "t02", 5, "t03"], ["t01", "t02", "t03"])).toEqual(["t02", "t03"]);
+  });
+
+  it("restores custom playlists only when their shape and track IDs are valid", async () => {
+    const { sanitizePlaylists } = await import("./music");
+    const value = sanitizePlaylists([
+      { id: "custom-1", title: "  Nocturna  ", cover: "art-01", coverImage: "https://example.com/a.jpg", trackIds: ["t01", "wrong", "t01"] },
+      { id: "p01", title: "Playlist de sistema", cover: "art-01", coverImage: "x", trackIds: [] },
+      { id: "custom-2", title: " ", cover: "art-01", coverImage: "x", trackIds: [] },
+    ], ["t01", "t02"]);
+    expect(value).toHaveLength(1);
+    expect(value[0]).toMatchObject({ id: "custom-1", title: "Nocturna", trackIds: ["t01"], isCustom: true });
+  });
+
+  it("inserts a play-next item immediately after the current track without duplicates", async () => {
+    const { insertAfterCurrent } = await import("./music");
+    expect(insertAfterCurrent(["t01", "t02", "t03"], "t03", "t01")).toEqual(["t01", "t03", "t02"]);
+    expect(insertAfterCurrent(["t01", "t02", "t03"], "t02", "t01")).toEqual(["t01", "t02", "t03"]);
+    expect(insertAfterCurrent(["t01", "t02"], "t03", null)).toEqual(["t03", "t01", "t02"]);
+  });
+
+  it("reorders upcoming items without moving them ahead of the current track", async () => {
+    const { moveId } = await import("./music");
+    expect(moveId(["t01", "t02", "t03"], "t03", -1, 1)).toEqual(["t01", "t03", "t02"]);
+    expect(moveId(["t01", "t02", "t03"], "t02", -1, 1)).toEqual(["t01", "t02", "t03"]);
+  });
+
+  it("converts only recognised Spotify URIs to canonical web links", async () => {
+    const { spotifyUriToWebUrl } = await import("./music");
+    expect(spotifyUriToWebUrl("spotify:track:abc123")).toBe("https://open.spotify.com/track/abc123");
+    expect(spotifyUriToWebUrl("spotify:artist:abc123")).toBe("https://open.spotify.com/artist/abc123");
+    expect(spotifyUriToWebUrl("not-a-uri")).toBe("https://open.spotify.com/");
+  });
+});
