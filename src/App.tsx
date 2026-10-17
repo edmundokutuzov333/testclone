@@ -405,21 +405,6 @@ export default function App() {
     );
   }
 
-  function renderAlbumCards() {
-    const albums = Array.from(new Map(tracks.map((track) => [track.album, track] as const)).values());
-    return (
-      <div className="media-grid playlist-grid">
-        {albums.map((track) => (
-          <button className="media-card" key={track.album} onClick={() => openAlbum(track.album)}>
-            <div className="media-card-cover"><CoverArt cover={track.cover} /><span className="card-play"><Play size={19} fill="currentColor" /></span></div>
-            <span className="media-card-title">{track.album}</span>
-            <span className="media-card-description">{track.artist} · Álbum</span>
-          </button>
-        ))}
-      </div>
-    );
-  }
-
   function renderHome() {
     const quickPicks = playlists.slice(0, 6);
     return (
