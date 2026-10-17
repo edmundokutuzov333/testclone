@@ -17,7 +17,7 @@ export function searchTracks(catalog: Track[], query: string): Track[] {
 }
 
 export function getTracks(ids: string[], catalog: Track[]): Track[] {
-  const indexed = new Map(catalog.map((track) => [track.id, track]));
+  const indexed = new Map(catalog.map((track) => [track.id, track] as const));
   return ids.flatMap((id) => {
     const track = indexed.get(id);
     return track ? [track] : [];

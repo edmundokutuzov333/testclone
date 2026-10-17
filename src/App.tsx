@@ -122,13 +122,14 @@ export default function App() {
 
   const allPlaylists = useMemo(() => [...playlists, ...customPlaylists], [customPlaylists]);
   const currentPlaylist = allPlaylists.find((playlist) => playlist.id === selectedPlaylistId);
-  const likedTracks = useMemo(() => getTracks(likedIds, tracks), [likedIds]);
-  const recentTracks = useMemo(() => getTracks(recentIds, tracks), [recentIds]);
-  const searchedTracks = useMemo(() => searchTracks(tracks, searchQuery), [searchQuery]);
-  const artistTracks = useMemo(() => tracks.filter((track) => track.artist === selectedArtistName), [selectedArtistName]);
-  const albumTracks = useMemo(() => tracks.filter((track) => track.album === selectedAlbumName), [selectedAlbumName]);
-  const queueTracks = useMemo(() => getTracks(queueIds, tracks), [queueIds]);
-  const playlistTracks = useMemo(() => getTracks(currentPlaylist?.trackIds ?? [], tracks), [currentPlaylist]);
+  const availableTracks = useMemo(() => explicitContent ? tracks : tracks.filter((track) => !track.explicit), [explicitContent]);
+  const likedTracks = useMemo(() => getTracks(likedIds, availableTracks), [likedIds, availableTracks]);
+  const recentTracks = useMemo(() => getTracks(recentIds, availableTracks), [recentIds, availableTracks]);
+  const searchedTracks = useMemo(() => searchTracks(availableTracks, searchQuery), [availableTracks, searchQuery]);
+  const artistTracks = useMemo(() => availableTracks.filter((track) => track.artist === selectedArtistName), [availableTracks, selectedArtistName]);
+  const albumTracks = useMemo(() => availableTracks.filter((track) => track.album === selectedAlbumName), [availableTracks, selectedAlbumName]);
+  const queueTracks = useMemo(() => getTracks(queueIds, availableTracks), [queueIds, availableTracks]);
+  const playlistTracks = useMemo(() => getTracks(currentPlaylist?.trackIds ?? [], availableTracks), [currentPlaylist, availableTracks]);
   const greeting = new Date().getHours() < 12 ? "Bom dia" : new Date().getHours() < 19 ? "Boa tarde" : "Boa noite";
 
   useEffect(() => writeStored("kufy:likes", likedIds), [likedIds]);
@@ -140,7 +141,7 @@ export default function App() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentTrack) return;
-    audio.volume = volume;
+    audio.volume = Math.min(1, volume * (normalization ? 1 : 0.82));
     if (isPlaying) {
       const playback = audio.play();
       if (playback && typeof playback.catch === "function") {
@@ -152,7 +153,7 @@ export default function App() {
     } else {
       audio.pause();
     }
-  }, [currentTrack, isPlaying, volume]);
+  }, [currentTrack, isPlaying, volume, normalization]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -180,6 +181,14 @@ export default function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [currentTrack]);
+
+  useEffect(() => {
+    if (!explicitContent && currentTrack?.explicit) {
+      setIsPlaying(false);
+      setCurrentTrack(null);
+      setNotice("A reprodução foi interrompida porque o conteúdo explícito está desactivado.");
+    }
+  }, [explicitContent, currentTrack]);
 
   useEffect(() => {
     if (!notice) return;
@@ -218,6 +227,8 @@ export default function App() {
     if (repeat && audioRef.current) {
       audioRef.current.currentTime = 0;
       setCurrentTime(0);
+      const restart = audioRef.current.play();
+      if (restart && typeof restart.catch === "function") restart.catch(() => setIsPlaying(false));
       setIsPlaying(true);
       return;
     }
@@ -395,7 +406,7 @@ export default function App() {
   }
 
   function renderAlbumCards() {
-    const albums = Array.from(new Map(tracks.map((track) => [track.album, track])).values());
+    const albums = Array.from(new Map(tracks.map((track) => [track.album, track] as const)).values());
     return (
       <div className="media-grid playlist-grid">
         {albums.map((track) => (
@@ -634,7 +645,7 @@ export default function App() {
         {modal === "add-to-playlist" ? <div className="modal-body"><h2>Guardar música</h2><p>{pendingTrack ? "Escolhe onde queres guardar “" + pendingTrack.title + "”." : "Escolhe uma playlist para adicionar músicas ou cria uma nova."}</p><div className="modal-list">{customPlaylists.map((playlist) => <button key={playlist.id} className="modal-list-item" onClick={() => pendingTrack ? addTrackToPlaylist(playlist.id) : (setSelectedPlaylistId(playlist.id), setModal(null), setActiveView("playlist"))}><CoverArt cover={playlist.cover} /><span><strong>{playlist.title}</strong><small>{playlist.trackIds.length} músicas</small></span><Plus size={17} /></button>)}</div><button className="button button-outline button-full" onClick={() => openCreatePlaylist(pendingTrack ?? undefined)}><Plus size={17} /> Criar nova playlist</button>{customPlaylists.length === 0 ? <p className="modal-note">Ainda não criaste playlists pessoais.</p> : null}</div> : null}
         {modal === "account" ? <form className="modal-body" onSubmit={submitAccount}><div className="modal-illustration"><UserRound size={28} /></div><h2>{displayName ? "Estás a ouvir como " + displayName : isSignup ? "Cria o teu espaço" : "Entra no teu universo"}</h2><p>Este protótipo guarda apenas um nome local. Ainda não existe autenticação real ou conta online.</p>{displayName ? <><div className="account-status"><span className="avatar">{displayName.slice(0, 1).toUpperCase()}</span><div><strong>{displayName}</strong><small>Perfil local de demonstração</small></div></div><button type="button" className="button button-outline button-full" onClick={() => { setDisplayName(null); setModal(null); setNotice("Sessão local terminada"); }}>Terminar sessão</button></> : <><label className="field-label" htmlFor="account-email">E-mail</label><input id="account-email" className="text-field" type="email" value={accountEmail} onChange={(event) => setAccountEmail(event.target.value)} placeholder="nome@exemplo.com" required /><button className="button button-primary button-full" type="submit">{isSignup ? "Criar perfil de demonstração" : "Continuar"}</button><button type="button" className="text-action centered-action" onClick={() => setIsSignup((value) => !value)}>{isSignup ? "Já tens perfil? Entrar" : "Ainda não tens conta? Criar perfil"}</button></>}</form> : null}
         {modal === "premium" ? <div className="modal-body premium-body"><div className="premium-orb"><Crown size={31} /></div><span className="eyebrow">KUFY PLUS</span><h2>Ouve sem limites.</h2><p>A experiência Plus está aqui como conceito de produto. Pagamentos, subscrições e benefícios reais ainda não estão ligados.</p><div className="premium-features"><span><Check size={16} /> Reprodução sem interrupções de interface</span><span><Check size={16} /> Biblioteca personalizada</span><span><Check size={16} /> Controlo de reprodução</span><span className="muted-feature"><X size={16} /> Downloads offline reais, ainda não disponíveis</span></div><button className="button button-primary button-full" onClick={() => { setModal(null); setNotice("O fluxo comercial será ligado numa fase futura"); }}>Percebi</button><small className="modal-note">Sem cobrança. Nenhuma subscrição foi criada.</small></div> : null}
-        {modal === "settings" ? <div className="modal-body"><h2>Personaliza a tua experiência</h2><p>Preferências guardadas apenas nesta sessão.</p><div className="settings-row"><span><strong>Normalização do áudio</strong><small>Volume mais consistente entre faixas</small></span><button className={normalization ? "toggle-switch toggle-on" : "toggle-switch"} onClick={() => setNormalization((value) => !value)} aria-label="Alternar normalização"><span /></button></div><div className="settings-row"><span><strong>Conteúdo explícito</strong><small>Permitir faixas assinaladas como explícitas</small></span><button className={explicitContent ? "toggle-switch toggle-on" : "toggle-switch"} onClick={() => setExplicitContent((value) => !value)} aria-label="Alternar conteúdo explícito"><span /></button></div><div className="settings-row"><span><strong>Atalhos de teclado</strong><small>Espaço reproduz/pausa, Ctrl K pesquisa, setas saltam 5 segundos.</small></span><Activity size={20} /></div><button className="button button-outline button-full" onClick={() => setModal(null)}>Fechar definições</button></div> : null}
+        {modal === "settings" ? <div className="modal-body"><h2>Personaliza a tua experiência</h2><p>Preferências guardadas apenas nesta sessão.</p><div className="settings-row"><span><strong>Nível de saída</strong><small>Ajuste ligeiro do volume no leitor de demonstração</small></span><button className={normalization ? "toggle-switch toggle-on" : "toggle-switch"} onClick={() => setNormalization((value) => !value)} aria-label="Alternar normalização"><span /></button></div><div className="settings-row"><span><strong>Conteúdo explícito</strong><small>Permitir faixas assinaladas como explícitas</small></span><button className={explicitContent ? "toggle-switch toggle-on" : "toggle-switch"} onClick={() => setExplicitContent((value) => !value)} aria-label="Alternar conteúdo explícito"><span /></button></div><div className="settings-row"><span><strong>Atalhos de teclado</strong><small>Espaço reproduz/pausa, Ctrl K pesquisa, setas saltam 5 segundos.</small></span><Activity size={20} /></div><button className="button button-outline button-full" onClick={() => setModal(null)}>Fechar definições</button></div> : null}
         {modal === "queue" ? <div className="modal-body"><h2>A seguir</h2><p>{queueTracks.length} faixas na fila actual.</p>{currentTrack ? <div className="queue-now"><CoverArt cover={currentTrack.cover} /><div><small>A TOCAR AGORA</small><strong>{currentTrack.title}</strong><span>{currentTrack.artist}</span></div></div> : null}<div className="modal-list queue-list">{queueTracks.filter((track) => track.id !== currentTrack?.id).map((track) => <button key={track.id} className="modal-list-item" onClick={() => playTrack(track, queueTracks)}><CoverArt cover={track.cover} /><span><strong>{track.title}</strong><small>{track.artist}</small></span><span className="track-duration">{formatTime(track.duration)}</span></button>)}</div><button className="button button-outline button-full" onClick={() => setQueueIds(tracks.map((track) => track.id))}>Repor fila de demonstração</button></div> : null}
         {modal === "lyrics" ? <div className="modal-body lyrics-body">{currentTrack ? <><CoverArt cover={currentTrack.cover} large /><span className="eyebrow">LETRA</span><h2>{currentTrack.title}</h2><p>{currentTrack.artist}</p><div className="lyrics-unavailable"><Mic2 size={25} /><strong>Letra não disponível</strong><span>As faixas actuais são áudio de demonstração e não incluem letras licenciadas.</span></div></> : <EmptyState icon={<Mic2 size={27} />} title="Escolhe uma faixa" description="A letra aparece aqui quando estiver disponível." />}</div> : null}
         {modal === "devices" ? <div className="modal-body"><h2>Onde estás a ouvir?</h2><p>O áudio desta versão toca no navegador actual.</p><div className="device-current"><span><MonitorSpeaker size={22} /></span><div><strong>Este dispositivo</strong><small>Reprodução neste navegador</small></div><Check size={17} /></div><div className="device-info"><Headphones size={18} /><span>Colunas inteligentes, aplicações móveis e ligação entre dispositivos ainda precisam de serviços adicionais.</span></div></div> : null}

@@ -34,7 +34,7 @@ export const tracks: Track[] = [
   { id: "t01", title: "Cidade em Chamas", artist: "Mila Vento", album: "Depois da Meia-Noite", duration: 218, cover: "art-01", audioUrl: demoAudio[0] },
   { id: "t02", title: "Sem Pressa", artist: "Nuno Sol", album: "Frequência Baixa", duration: 194, cover: "art-02", audioUrl: demoAudio[1] },
   { id: "t03", title: "Vermelho Neon", artist: "Luma", album: "Vermelho Neon", duration: 207, cover: "art-03", audioUrl: demoAudio[2] },
-  { id: "t04", title: "Maputo às 2", artist: "Dário K", album: "Linha da Frente", duration: 231, cover: "art-04", audioUrl: demoAudio[3] },
+  { id: "t04", title: "Maputo às 2", artist: "Dário K", album: "Linha da Frente", duration: 231, cover: "art-04", audioUrl: demoAudio[3], explicit: true },
   { id: "t05", title: "Outra Margem", artist: "Maya C", album: "Entre Nós", duration: 202, cover: "art-05", audioUrl: demoAudio[4] },
   { id: "t06", title: "Fica Mais", artist: "Léo Mar", album: "Frequência Baixa", duration: 185, cover: "art-06", audioUrl: demoAudio[5] },
   { id: "t07", title: "Sem Sinal", artist: "Nia Luz", album: "Sem Sinal", duration: 221, cover: "art-07", audioUrl: demoAudio[6] },
@@ -46,7 +46,7 @@ export const tracks: Track[] = [
   { id: "t13", title: "Só Mais Uma", artist: "Luma", album: "Vermelho Neon", duration: 201, cover: "art-13", audioUrl: demoAudio[1] },
   { id: "t14", title: "Perto do Mar", artist: "Maya C", album: "Entre Nós", duration: 216, cover: "art-14", audioUrl: demoAudio[7] },
   { id: "t15", title: "No Meu Tempo", artist: "Mila Vento", album: "Depois da Meia-Noite", duration: 196, cover: "art-15", audioUrl: demoAudio[0] },
-  { id: "t16", title: "Pulso", artist: "Dário K", album: "Linha da Frente", duration: 209, cover: "art-16", audioUrl: demoAudio[3] },
+  { id: "t16", title: "Pulso", artist: "Dário K", album: "Linha da Frente", duration: 209, cover: "art-16", audioUrl: demoAudio[3], explicit: true },
 ];
 
 export const playlists: MusicPlaylist[] = [
