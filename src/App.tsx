@@ -182,7 +182,7 @@ export default function App() {
       } else if (!typing && event.code === "Space") {
         event.preventDefault();
         if (!currentTrack) {
-          playTrack(tracks[0], tracks);
+          startPlaybackFromQueue();
         } else if (spotifyController) {
           if (isPlaying) spotifyController.pause();
           else spotifyController.play();
@@ -197,7 +197,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [currentTrack, currentTime, isPlaying, spotifyController]);
+  }, [currentTrack, currentTime, isPlaying, spotifyController, queueTracks, availableTracks]);
 
   useEffect(() => {
     if (!explicitContent && currentTrack?.explicit) {
@@ -244,9 +244,15 @@ export default function App() {
     setRecentIds((current) => toggleId(current, track.id).slice(0, 30));
   }
 
+  function startPlaybackFromQueue() {
+    const source = queueTracks.length ? queueTracks : availableTracks;
+    const firstTrack = source[0];
+    if (firstTrack) playTrack(firstTrack, source);
+  }
+
   function togglePlayback() {
     if (!currentTrack) {
-      playTrack(tracks[0], tracks);
+      startPlaybackFromQueue();
       return;
     }
     if (spotifyController) {
@@ -259,7 +265,7 @@ export default function App() {
 
   function playNext() {
     if (!currentTrack) {
-      playTrack(tracks[0], tracks);
+      startPlaybackFromQueue();
       return;
     }
     if (repeat && spotifyController) {
@@ -524,7 +530,7 @@ export default function App() {
             <h1>Música que<br /><em>fica contigo.</em></h1>
             <p>Novas descobertas, vozes próximas e sons que combinam com o teu momento.</p>
             <div className="hero-actions">
-              <button className="button button-primary" onClick={() => playTrack(tracks[0], tracks)}><Play size={17} fill="currentColor" /> Começar a ouvir</button>
+              <button className="button button-primary" onClick={startPlaybackFromQueue}><Play size={17} fill="currentColor" /> Começar a ouvir</button>
               <button className="button button-glass" onClick={() => goTo("search")}><Search size={16} /> Explorar sons</button>
             </div>
           </div>
@@ -712,7 +718,7 @@ export default function App() {
           <button className={activeView === "recent" ? "collection-link collection-active" : "collection-link"} onClick={() => goTo("recent")}><span className="collection-icon recent-icon"><Clock3 size={16} /></span><span><strong>Ouvido recentemente</strong><small>O teu histórico</small></span></button>
         </nav>
         <div className="sidebar-bottom">
-          <div className="sidebar-live-card"><div className="live-card-top"><span className="live-dot" /> KUFY RADIO</div><p>Há sempre um som à tua espera.</p><button onClick={() => playTrack(tracks[3], tracks)}>Ouvir agora <Play size={13} fill="currentColor" /></button><div className="radio-decoration"><i /><i /><i /><i /><i /><i /><i /></div></div>
+          <div className="sidebar-live-card"><div className="live-card-top"><span className="live-dot" /> KUFY RADIO</div><p>Há sempre um som à tua espera.</p><button onClick={startPlaybackFromQueue}>Ouvir agora <Play size={13} fill="currentColor" /></button><div className="radio-decoration"><i /><i /><i /><i /><i /><i /><i /></div></div>
           <div className="sidebar-legal"><button onClick={() => setModal("settings")}>Definições</button><span>·</span><button onClick={() => setModal("premium")}>Kufy Plus</button></div>
         </div>
       </aside>
@@ -749,7 +755,7 @@ export default function App() {
         {modal === "account" ? <form className="modal-body" onSubmit={submitAccount}><div className="modal-illustration"><UserRound size={28} /></div><h2>{displayName ? "Estás a ouvir como " + displayName : isSignup ? "Cria o teu espaço" : "Entra no teu universo"}</h2><p>Este protótipo guarda apenas um nome local. Ainda não existe autenticação real ou conta online.</p>{displayName ? <><div className="account-status"><span className="avatar">{displayName.slice(0, 1).toUpperCase()}</span><div><strong>{displayName}</strong><small>Perfil local de demonstração</small></div></div><button type="button" className="button button-outline button-full" onClick={() => { setDisplayName(null); setModal(null); setNotice("Sessão local terminada"); }}>Terminar sessão</button></> : <><label className="field-label" htmlFor="account-email">E-mail</label><input id="account-email" className="text-field" type="email" value={accountEmail} onChange={(event) => setAccountEmail(event.target.value)} placeholder="nome@exemplo.com" required /><button className="button button-primary button-full" type="submit">{isSignup ? "Criar perfil de demonstração" : "Continuar"}</button><button type="button" className="text-action centered-action" onClick={() => setIsSignup((value) => !value)}>{isSignup ? "Já tens perfil? Entrar" : "Ainda não tens conta? Criar perfil"}</button></>}</form> : null}
         {modal === "premium" ? <div className="modal-body premium-body"><div className="premium-orb"><Headphones size={31} /></div><span className="eyebrow">KUFY PLUS</span><h2>Ouve sem limites.</h2><p>Kufy Plus é uma proposta visual de subscrição. Não existe cobrança nem subscrição activa nesta versão.</p><div className="premium-features"><span><Check size={16} /> Biblioteca e playlists personalizadas</span><span><Check size={16} /> Capas e páginas de artista oficiais</span><span><Check size={16} /> Reprodução através do leitor oficial</span><span className="muted-feature"><X size={16} /> Downloads offline reais, ainda não disponíveis</span></div><button className="button button-primary button-full" onClick={() => { setModal(null); setNotice("O fluxo comercial será ligado numa fase futura"); }}>Percebi</button><small className="modal-note">Sem cobrança. Nenhuma subscrição foi criada.</small></div> : null}
         {modal === "settings" ? <div className="modal-body"><h2>Personaliza a tua experiência</h2><p>Preferências guardadas neste dispositivo.</p><div className="settings-row"><span><strong>Permitir conteúdo explícito</strong><small>Incluir as faixas sinalizadas no catálogo oficial</small></span><button className={explicitContent ? "toggle-switch toggle-on" : "toggle-switch"} onClick={() => setExplicitContent((value) => !value)} aria-label="Alternar conteúdo explícito"><span /></button></div><div className="settings-row"><span><strong>Atalhos de teclado</strong><small>Espaço reproduz/pausa, Ctrl K pesquisa, setas saltam 5 segundos.</small></span><Keyboard size={20} /></div><button className="button button-outline button-full" onClick={() => setModal(null)}>Fechar definições</button></div> : null}
-        {modal === "queue" ? <div className="modal-body"><h2>A seguir</h2><p>{queueTracks.filter((track) => track.id !== currentTrack?.id).length} faixas por reproduzir.</p>{currentTrack ? <div className="queue-now"><CoverArt cover={currentTrack.cover} image={currentTrack.coverImage} /><div><small>A TOCAR AGORA</small><strong>{currentTrack.title}</strong><span>{currentTrack.artist}</span></div></div> : null}<div className="modal-list queue-list">{queueTracks.filter((track) => track.id !== currentTrack?.id).map((track) => <div key={track.id} className="queue-item"><button className="modal-list-item queue-track-button" onClick={() => playTrack(track, queueTracks)}><CoverArt cover={track.cover} image={track.coverImage} /><span><strong>{track.title}</strong><small>{track.artist}</small></span><span className="track-duration">{formatTime(track.duration)}</span></button><div className="queue-item-actions"><IconButton label="Mover para cima" onClick={() => moveQueuedTrack(track.id, -1)}><ArrowUp size={14} /></IconButton><IconButton label="Mover para baixo" onClick={() => moveQueuedTrack(track.id, 1)}><ArrowDown size={14} /></IconButton><IconButton label="Remover da fila" onClick={() => removeQueuedTrack(track.id)}><X size={14} /></IconButton></div></div>)}</div>{queueTracks.filter((track) => track.id !== currentTrack?.id).length === 0 ? <EmptyState icon={<ListMusic size={25} />} title="Não há próximas faixas" description="Adiciona música à fila ou carrega o catálogo completo." /> : null}<div className="queue-footer-actions"><button className="button button-outline button-full" onClick={() => { const ids = tracks.map((track) => track.id); setQueueIds(currentTrack ? [currentTrack.id, ...ids.filter((id) => id !== currentTrack.id)] : ids); setNotice("Catálogo completo adicionado à fila"); }}>Adicionar catálogo completo</button><button className="button button-glass button-full" onClick={() => { setQueueIds(currentTrack ? [currentTrack.id] : []); setNotice("Fila futura limpa"); }}>Limpar fila futura</button></div></div> : null}
+        {modal === "queue" ? <div className="modal-body"><h2>A seguir</h2><p>{queueTracks.filter((track) => track.id !== currentTrack?.id).length} faixas por reproduzir.</p>{currentTrack ? <div className="queue-now"><CoverArt cover={currentTrack.cover} image={currentTrack.coverImage} /><div><small>A TOCAR AGORA</small><strong>{currentTrack.title}</strong><span>{currentTrack.artist}</span></div></div> : null}<div className="modal-list queue-list">{queueTracks.filter((track) => track.id !== currentTrack?.id).map((track) => <div key={track.id} className="queue-item"><button className="modal-list-item queue-track-button" onClick={() => playTrack(track, queueTracks)}><CoverArt cover={track.cover} image={track.coverImage} /><span><strong>{track.title}</strong><small>{track.artist}</small></span><span className="track-duration">{formatTime(track.duration)}</span></button><div className="queue-item-actions"><IconButton label="Mover para cima" onClick={() => moveQueuedTrack(track.id, -1)}><ArrowUp size={14} /></IconButton><IconButton label="Mover para baixo" onClick={() => moveQueuedTrack(track.id, 1)}><ArrowDown size={14} /></IconButton><IconButton label="Remover da fila" onClick={() => removeQueuedTrack(track.id)}><X size={14} /></IconButton></div></div>)}</div>{queueTracks.filter((track) => track.id !== currentTrack?.id).length === 0 ? <EmptyState icon={<ListMusic size={25} />} title="Não há próximas faixas" description="Adiciona música à fila ou carrega o catálogo completo." /> : null}<div className="queue-footer-actions"><button className="button button-outline button-full" onClick={() => { const ids = availableTracks.map((track) => track.id); const currentIsAvailable = currentTrack && ids.includes(currentTrack.id); setQueueIds(currentIsAvailable ? [currentTrack.id, ...ids.filter((id) => id !== currentTrack.id)] : ids); setNotice("Catálogo disponível adicionado à fila"); }}>Adicionar catálogo completo</button><button className="button button-glass button-full" onClick={() => { setQueueIds(currentTrack ? [currentTrack.id] : []); setNotice("Fila futura limpa"); }}>Limpar fila futura</button></div></div> : null}
         {modal === "lyrics" ? <div className="modal-body lyrics-body">{currentTrack ? <><CoverArt cover={currentTrack.cover} large /><span className="eyebrow">LETRA</span><h2>{currentTrack.title}</h2><p>{currentTrack.artist}</p><div className="lyrics-unavailable"><Mic2 size={25} /><strong>Letra não disponível</strong><span>As letras dependem da disponibilidade e das permissões do detentor dos direitos.</span></div></> : <EmptyState icon={<Mic2 size={27} />} title="Escolhe uma faixa" description="A letra aparece aqui quando estiver disponível." />}</div> : null}
         {modal === "devices" ? <div className="modal-body"><h2>Onde estás a ouvir?</h2><p>A reprodução é fornecida pelo leitor oficial do Spotify no navegador actual.</p><div className="device-current"><span><MonitorSpeaker size={22} /></span><div><strong>Este dispositivo</strong><small>Reprodução neste navegador</small></div><Check size={17} /></div><div className="device-info"><Headphones size={18} /><span>Colunas inteligentes, aplicações móveis e ligação entre dispositivos ainda precisam de serviços adicionais.</span></div></div> : null}
       </section></div> : null}
