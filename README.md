@@ -1,54 +1,45 @@
 # Kufy
 
-Kufy is an original music discovery and playback interface. It uses its own name, visual language, mock catalogue and CSS-generated artwork. It is inspired by familiar music-player conventions, but does not use Spotify source code, branding or artwork.
+Kufy é uma experiência independente de descoberta musical construída com React, TypeScript e Vite. O visual usa uma identidade editorial própria, tons escuros, vermelho-carmim, capas oficiais do catálogo e animações discretas.
 
-## Start locally
+## Executar localmente
 
-Requirements: Node.js 22 or newer and npm.
+Requisitos: Node.js 22 ou superior e npm.
 
-\`\`\`bash
+~~~bash
 npm install
 npm run dev
-\`\`\`
+~~~
 
-Create a production bundle with \`npm run build\`. Run domain tests with \`npm test\`.
+Build de produção: **npm run build**. Testes: **npm test**.
 
-## What works in this prototype
+## Funcionalidades desta versão
 
-- Responsive home, search, library, artist, album and playlist views.
-- Search by track, artist and album, with accent-insensitive matching.
-- Demo audio playback, pause/resume, previous/next, seek, volume, shuffle and repeat.
-- Track queue, recently played history and favourite tracks.
-- Create playlists and add catalogue tracks to them.
-- Follow artists, profile display, settings panel and keyboard shortcuts.
-- Local persistence for favourites, playlists, follow state, recent history and display name.
-- Independently authored red/dark UI and CSS-generated cover art.
+- Página inicial, pesquisa, biblioteca, artistas, álbuns e playlists.
+- Catálogo com temas de Travis Scott, Matuê, Laylizzy e Dygo Boy.
+- Leitor oficial do Spotify através da iFrame Embed API.
+- Pesquisa por música, artista e álbum, incluindo pesquisa sem acentos.
+- Favoritos, histórico, criação de playlists e seguimento de artistas.
+- Leitor flutuante, fila, atalhos de teclado e definições.
+- Identidade visual própria, capas de catálogo, layouts adaptáveis e animações com suporte a preferência por movimento reduzido.
+- Pipeline GitHub Actions com testes de domínio e build de produção.
 
-## Demo versus production
+## Catálogo musical e direitos
 
-This repository currently contains a frontend prototype, not a complete commercial streaming service. The catalogue metadata is fictional. The audio URLs point to public SoundHelix example streams and are only used to demonstrate the player; they are not Kufy's licensed music catalogue and availability depends on the remote host and network.
+O Kufy não aloja, descarrega nem serve ficheiros de áudio protegidos por direitos de autor. A reprodução é fornecida pelo leitor oficial do Spotify. A disponibilidade depende do Spotify, da conta do ouvinte e da região.
 
-Login/profile is a local UI demonstration, not secure authentication. The Plus panel does not charge money. Offline downloads, licensed lyrics, real subscriptions, music rights, search indexing, cloud accounts, synchronisation between devices, recommendations backed by listening events, podcast ingestion, content moderation and production analytics are not implemented as backend services. Do not collect real passwords or payment details in this prototype.
+Algumas entradas apontam para a página oficial de artista ou de álbum quando não foi possível verificar uma URL de faixa individual durante a preparação do catálogo. Essas entradas estão identificadas no leitor como catálogo do Spotify, para o utilizador seleccionar a faixa pretendida.
 
-## Architecture
+As imagens apontam para o CDN de capas do Spotify. O Kufy não reivindica os direitos sobre as gravações, nomes artísticos ou imagens. Antes de uma publicação comercial, confirma os termos actuais do Spotify e obtém as permissões necessárias.
 
-- \`src/data.ts\`: typed demo catalogue and curated collections.
-- \`src/domain/music.ts\`: pure music search, ordering, time-formatting and storage helpers.
-- \`src/App.tsx\`: application composition and interactive UI state.
-- \`src/styles.css\`: responsive Kufy design system.
-- \`src/domain/music.test.ts\`: focused domain tests.
+## Arquitectura
 
-The implementation follows a few REA-inspired engineering principles: shared behavior at a clear boundary, typed contracts for catalogue entities, explicit handling of unavailable data, persistence isolated behind helpers, and tests for deterministic domain functions. REA is a reverse-engineering toolkit, not a turnkey music-service backend.
+- src/data.ts: catálogo tipado, capas oficiais e playlists seleccionadas.
+- src/domain/music.ts: pesquisa, ordenação, formatação de tempo e persistência local.
+- src/components/SpotifyPlayer.tsx: integração isolada com a iFrame Embed API do Spotify.
+- src/App.tsx: composição das páginas, estado e navegação.
+- src/styles.css: design tokens, componentes, layouts responsivos e animações.
+- src/domain/music.test.ts: testes de domínio e contrato do catálogo.
+- .github/workflows/ci.yml: instalação, testes e build.
 
-## Production roadmap
-
-1. Add a real backend, schema migrations, secure authentication and server-side authorization.
-2. Integrate a licensed catalogue/provider and a server-side playback entitlement layer.
-3. Build user, playlist, follow, history and library APIs; validate ownership on every write.
-4. Integrate a payment provider only after product, legal and subscription terms are defined.
-5. Add accessible player states, errors, observability, abuse controls, privacy/consent flows and end-to-end tests.
-6. Verify deployment and CI in the actual target environment before describing the service as production-ready.
-
-## Rights and identity
-
-Kufy is a separate project. Do not present it as Spotify, use Spotify's logo or copy its proprietary assets. Only publish audio, artwork, lyrics and artist data for which you have permission.
+As colecções e preferências do utilizador continuam locais neste protótipo. Autenticação real, sincronização na nuvem, letras licenciadas, pagamentos, subscrições, downloads offline e recomendações de produção ainda exigem serviços de backend.

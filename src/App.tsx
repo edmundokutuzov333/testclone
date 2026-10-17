@@ -1,12 +1,12 @@
 import {
-  Activity,
+  Keyboard,
   ArrowLeft,
   ArrowRight,
   Check,
   ChevronDown,
   ChevronRight,
   Clock3,
-  Crown,
+  Disc3,
   Heart,
   Headphones,
   Home,
@@ -29,27 +29,24 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
-  Sparkles,
   UserRound,
-  Volume1,
-  Volume2,
-  VolumeX,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent, ReactNode } from "react";
 import { artists, genres, playlists, tracks } from "./data";
+import SpotifyPlayer, { type SpotifyEmbedController, type SpotifyPlaybackState } from "./components/SpotifyPlayer";
 import type { MusicPlaylist, Track } from "./data";
 import { formatTime, getTracks, readStored, searchTracks, toggleId, writeStored } from "./domain/music";
 
 type View = "home" | "search" | "library" | "liked" | "recent" | "playlist" | "artist" | "album";
-type Modal = null | "create-playlist" | "add-to-playlist" | "account" | "premium" | "settings" | "queue" | "lyrics" | "devices";
+type Modal = null | "create-playlist" | "add-to-playlist" | "account" | "premium" | "settings" | "queue" | "lyrics" | "devices" | "spotify-player";
 type LibraryFilter = "Tudo" | "Playlists" | "Artistas" | "Álbuns";
 
-function CoverArt({ cover, large = false, rounded = false }: { cover: string; large?: boolean; rounded?: boolean }) {
+function CoverArt({ cover, image, large = false, rounded = false }: { cover: string; image?: string; large?: boolean; rounded?: boolean }) {
   return (
-    <div className={["cover-art", cover, large ? "cover-large" : "", rounded ? "cover-rounded" : ""].filter(Boolean).join(" ")}>
-      <span className="cover-mark" aria-hidden="true">K</span>
+    <div className={["cover-art", cover, large ? "cover-large" : "", rounded ? "cover-rounded" : "", image ? "cover-has-image" : ""].filter(Boolean).join(" ")}>
+      {image ? <img className="cover-photo" src={image} alt="" loading="lazy" decoding="async" /> : <span className="cover-mark" aria-hidden="true">K</span>}
       <span className="cover-glow" aria-hidden="true" />
     </div>
   );
@@ -94,7 +91,6 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(0.75);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
   const [likedIds, setLikedIds] = useState<string[]>(() => readStored("kufy:likes", ["t02", "t06", "t10"]));
@@ -113,12 +109,24 @@ export default function App() {
   const [isSignup, setIsSignup] = useState(false);
   const [searchType, setSearchType] = useState<"Tudo" | "Músicas" | "Artistas" | "Playlists">("Tudo");
   const [notice, setNotice] = useState("");
-  const [normalization, setNormalization] = useState(true);
-  const [explicitContent, setExplicitContent] = useState(false);
+  const [explicitContent, setExplicitContent] = useState(true);
   const [showMobileNav, setShowMobileNav] = useState(false);
   const [librarySearch, setLibrarySearch] = useState("");
-  const audioRef = useRef<HTMLAudioElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const [spotifyController, setSpotifyController] = useState<SpotifyEmbedController | null>(null);
+
+  const handleSpotifyController = useCallback((controller: SpotifyEmbedController | null) => {
+    setSpotifyController(controller);
+  }, []);
+  const handleSpotifyPlaybackState = useCallback((state: SpotifyPlaybackState) => {
+    setCurrentTime(state.position);
+    setDuration(state.duration || currentTrack?.duration || 0);
+    setIsPlaying(!state.isPaused);
+  }, [currentTrack?.duration]);
+  const handleSpotifyError = useCallback((message: string) => {
+    setIsPlaying(false);
+    setNotice(message);
+  }, []);
 
   const allPlaylists = useMemo(() => [...playlists, ...customPlaylists], [customPlaylists]);
   const currentPlaylist = allPlaylists.find((playlist) => playlist.id === selectedPlaylistId);
@@ -138,22 +146,6 @@ export default function App() {
   useEffect(() => writeStored("kufy:following", followingIds), [followingIds]);
   useEffect(() => writeStored("kufy:displayName", displayName), [displayName]);
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.volume = Math.min(1, volume * (normalization ? 1 : 0.82));
-    if (!currentTrack || !isPlaying) {
-      audio.pause();
-      return;
-    }
-    const playback = audio.play();
-    if (playback && typeof playback.catch === "function") {
-      playback.catch(() => {
-        setIsPlaying(false);
-        setNotice("A faixa de demonstração não está acessível. Verifica a ligação e tenta novamente.");
-      });
-    }
-  }, [currentTrack, isPlaying, volume, normalization]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -168,24 +160,30 @@ export default function App() {
         if (!currentTrack) {
           setCurrentTrack(tracks[0]);
           setQueueIds(tracks.map((track) => track.id));
-          setIsPlaying(true);
+          setCurrentTime(0);
+          setDuration(tracks[0].duration);
+          setModal("spotify-player");
+        } else if (spotifyController) {
+          if (isPlaying) spotifyController.pause();
+          else spotifyController.play();
         } else {
-          setIsPlaying((value) => !value);
+          setModal("spotify-player");
         }
-      } else if (!typing && event.code === "ArrowRight" && audioRef.current) {
-        audioRef.current.currentTime = Math.min(audioRef.current.currentTime + 5, audioRef.current.duration || 0);
-      } else if (!typing && event.code === "ArrowLeft" && audioRef.current) {
-        audioRef.current.currentTime = Math.max(audioRef.current.currentTime - 5, 0);
+      } else if (!typing && event.code === "ArrowRight" && spotifyController) {
+        spotifyController.seek(Math.floor(currentTime + 5));
+      } else if (!typing && event.code === "ArrowLeft" && spotifyController) {
+        spotifyController.seek(Math.max(0, Math.floor(currentTime - 5)));
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [currentTrack]);
+  }, [currentTrack, currentTime, isPlaying, spotifyController]);
 
   useEffect(() => {
     if (!explicitContent && currentTrack?.explicit) {
       setIsPlaying(false);
       setCurrentTrack(null);
+      setModal(null);
       setNotice("A reprodução foi interrompida porque o conteúdo explícito está desactivado.");
     }
   }, [explicitContent, currentTrack]);
@@ -202,12 +200,23 @@ export default function App() {
     if (view !== "search") setSearchQuery("");
   }
 
+  function closeModal() {
+    if (modal === "spotify-player") {
+      setSpotifyController(null);
+      setIsPlaying(false);
+      setCurrentTime(0);
+    }
+    setModal(null);
+  }
+
   function playTrack(track: Track, source: Track[] = tracks) {
     const sourceIds = source.length ? source.map((item) => item.id) : tracks.map((item) => item.id);
     setQueueIds(sourceIds);
     setCurrentTrack(track);
     setCurrentTime(0);
-    setIsPlaying(true);
+    setDuration(track.duration);
+    setIsPlaying(false);
+    setModal("spotify-player");
     setRecentIds((current) => toggleId(current, track.id).slice(0, 30));
   }
 
@@ -216,7 +225,12 @@ export default function App() {
       playTrack(tracks[0], tracks);
       return;
     }
-    setIsPlaying((value) => !value);
+    if (spotifyController) {
+      if (isPlaying) spotifyController.pause();
+      else spotifyController.play();
+    } else {
+      setModal("spotify-player");
+    }
   }
 
   function playNext() {
@@ -224,12 +238,10 @@ export default function App() {
       playTrack(tracks[0], tracks);
       return;
     }
-    if (repeat && audioRef.current) {
-      audioRef.current.currentTime = 0;
+    if (repeat && spotifyController) {
+      spotifyController.seek(0);
+      spotifyController.play();
       setCurrentTime(0);
-      const restart = audioRef.current.play();
-      if (restart && typeof restart.catch === "function") restart.catch(() => setIsPlaying(false));
-      setIsPlaying(true);
       return;
     }
     const queue = queueTracks.length ? queueTracks : tracks;
@@ -246,8 +258,8 @@ export default function App() {
 
   function playPrevious() {
     if (!currentTrack) return;
-    if (audioRef.current && audioRef.current.currentTime > 3) {
-      audioRef.current.currentTime = 0;
+    if (spotifyController && currentTime > 3) {
+      spotifyController.seek(0);
       setCurrentTime(0);
       return;
     }
@@ -270,7 +282,8 @@ export default function App() {
       id: "custom-" + Date.now().toString(36),
       title: cleanedName,
       description: "A tua playlist, feita à tua maneira.",
-      cover: "art-15",
+      cover: pendingTrack?.cover ?? "art-01",
+      coverImage: pendingTrack?.coverImage ?? tracks[0].coverImage,
       trackIds: pendingTrack ? [pendingTrack.id] : [],
       owner: displayName || "A tua biblioteca",
       isCustom: true,
@@ -302,7 +315,8 @@ export default function App() {
   }
 
   function openArtist(artistName: string) {
-    setSelectedArtistName(artistName);
+    const primaryArtist = artistName.split(",")[0].trim();
+    setSelectedArtistName(artists.some((artist) => artist.name === artistName) ? artistName : primaryArtist);
     setActiveView("artist");
   }
 
@@ -313,7 +327,8 @@ export default function App() {
 
   function shareCurrentTrack() {
     if (!currentTrack) return;
-    const text = currentTrack.title + " · " + currentTrack.artist + " | Kufy";
+    const target = currentTrack.spotifyUri.replace(/^spotify:/, "https://open.spotify.com/").replace(/:/g, "/");
+    const text = currentTrack.title + " · " + currentTrack.artist + " | Kufy · " + target;
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(text).then(
         () => setNotice("Detalhes da faixa copiados"),
@@ -356,7 +371,7 @@ export default function App() {
               </button>
               <div className="track-main">
                 <button className="track-cover-button" onClick={() => isCurrent ? togglePlayback() : playTrack(track, queueSource)} aria-label={"Tocar " + track.title}>
-                  <CoverArt cover={track.cover} />
+                  <CoverArt cover={track.cover} image={track.coverImage} />
                 </button>
                 <div className="track-copy">
                   <button className="track-title" onClick={() => playTrack(track, queueSource)}>{track.title}</button>
@@ -382,7 +397,7 @@ export default function App() {
       <div className="media-grid playlist-grid">
         {items.map((playlist) => (
           <button key={playlist.id} className="media-card" onClick={() => { setSelectedPlaylistId(playlist.id); setActiveView("playlist"); }}>
-            <div className="media-card-cover"><CoverArt cover={playlist.cover} /><span className="card-play"><Play size={19} fill="currentColor" /></span></div>
+            <div className="media-card-cover"><CoverArt cover={playlist.cover} image={playlist.coverImage} /><span className="card-play"><Play size={19} fill="currentColor" /></span></div>
             <span className="media-card-title">{playlist.title}</span>
             <span className="media-card-description">{playlist.description}</span>
           </button>
@@ -396,7 +411,7 @@ export default function App() {
       <div className="media-grid artist-grid">
         {artists.slice(0, 6).map((artist) => (
           <button className="artist-card" key={artist.id} onClick={() => openArtist(artist.name)}>
-            <CoverArt cover={artist.cover} rounded />
+            <CoverArt cover={artist.cover} image={artist.coverImage} rounded />
             <span className="media-card-title">{artist.name}</span>
             <span className="media-card-description">Artista</span>
           </button>
@@ -411,7 +426,7 @@ export default function App() {
       <>
         <section className="hero-banner">
           <div className="hero-copy">
-            <span className="eyebrow"><Sparkles size={14} /> A TUA PRÓXIMA FREQUÊNCIA</span>
+            <span className="eyebrow"><Disc3 size={14} /> A TUA PRÓXIMA FREQUÊNCIA</span>
             <h1>Música que<br /><em>fica contigo.</em></h1>
             <p>Novas descobertas, vozes próximas e sons que combinam com o teu momento.</p>
             <div className="hero-actions">
@@ -420,11 +435,11 @@ export default function App() {
             </div>
           </div>
           <div className="hero-art" aria-hidden="true">
-            <div className="hero-orbit orbit-one" />
-            <div className="hero-orbit orbit-two" />
-            <div className="hero-disc"><span>K</span></div>
-            <div className="hero-sticker">OUVE<br />À TUA<br />MANEIRA</div>
-            <div className="hero-wave"><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /></div>
+            <div className="hero-cover-card hero-cover-back"><CoverArt cover={tracks[2].cover} image={tracks[2].coverImage} /></div>
+            <div className="hero-cover-card hero-cover-mid"><CoverArt cover={tracks[4].cover} image={tracks[4].coverImage} /></div>
+            <div className="hero-cover-card hero-cover-front"><CoverArt cover={tracks[0].cover} image={tracks[0].coverImage} /></div>
+            <div className="hero-art-caption"><span>SELECÇÃO 001</span><span>MAPUTO · GLOBAL</span></div>
+            <div className="hero-meter"><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /></div>
           </div>
           <div className="hero-bottom"><span><span className="live-dot" /> Seleção Kufy</span><span>01 / 06</span></div>
         </section>
@@ -434,7 +449,7 @@ export default function App() {
           <div className="quick-grid">
             {quickPicks.slice(0, 6).map((playlist) => (
               <button key={playlist.id} className="quick-pick" onClick={() => { setSelectedPlaylistId(playlist.id); setActiveView("playlist"); }}>
-                <CoverArt cover={playlist.cover} />
+                <CoverArt cover={playlist.cover} image={playlist.coverImage} />
                 <span>{playlist.title}</span>
                 <span className="quick-play"><Play size={17} fill="currentColor" /></span>
               </button>
@@ -487,7 +502,7 @@ export default function App() {
           <>
             <SectionHeading title="Explora por universo" subtitle="Escolhe uma frequência para começar." />
             <div className="genre-grid">
-              {genres.map((genre) => <button key={genre.title} className={"genre-card " + genre.tone} onClick={() => { setSearchQuery(genre.title.split(" ")[0]); setSearchType("Tudo"); }}><span>{genre.title}</span><CoverArt cover={genre.cover} /></button>)}
+              {genres.map((genre) => <button key={genre.title} className={"genre-card " + genre.tone} onClick={() => { setSearchQuery(genre.title.split(" ")[0]); setSearchType("Tudo"); }}><span>{genre.title}</span><CoverArt cover={genre.cover} image={genre.coverImage} /></button>)}
             </div>
             <section className="content-section inset-section"><SectionHeading title="Em destaque" /><>{renderPlaylistCards(playlists.slice(0, 3))}</></section>
           </>
@@ -504,7 +519,7 @@ export default function App() {
   }
 
   function renderArtistCardsFor(items: typeof artists) {
-    return <div className="media-grid artist-grid">{items.map((artist) => <button className="artist-card" key={artist.id} onClick={() => openArtist(artist.name)}><CoverArt cover={artist.cover} rounded /><span className="media-card-title">{artist.name}</span><span className="media-card-description">Artista</span></button>)}</div>;
+    return <div className="media-grid artist-grid">{items.map((artist) => <button className="artist-card" key={artist.id} onClick={() => openArtist(artist.name)}><CoverArt cover={artist.cover} image={artist.coverImage} rounded /><span className="media-card-title">{artist.name}</span><span className="media-card-description">Artista</span></button>)}</div>;
   }
 
   function renderLibrary() {
@@ -530,21 +545,21 @@ export default function App() {
   }
 
   function renderAlbumCardsFor(items: Track[]) {
-    return <div className="media-grid playlist-grid">{items.map((track) => <button className="media-card" key={track.album} onClick={() => openAlbum(track.album)}><div className="media-card-cover"><CoverArt cover={track.cover} /><span className="card-play"><Play size={19} fill="currentColor" /></span></div><span className="media-card-title">{track.album}</span><span className="media-card-description">{track.artist} · Álbum</span></button>)}</div>;
+    return <div className="media-grid playlist-grid">{items.map((track) => <button className="media-card" key={track.album} onClick={() => openAlbum(track.album)}><div className="media-card-cover"><CoverArt cover={track.cover} image={track.coverImage} /><span className="card-play"><Play size={19} fill="currentColor" /></span></div><span className="media-card-title">{track.album}</span><span className="media-card-description">{track.artist} · Álbum</span></button>)}</div>;
   }
 
-  function renderDetailHeader(title: string, description: string, cover: string, label: string, onPlay: () => void, extra?: ReactNode) {
+  function renderDetailHeader(title: string, description: string, cover: string, label: string, onPlay: () => void, extra?: ReactNode, coverImage?: string) {
     return (
       <div className="detail-hero">
-        <CoverArt cover={cover} large />
-        <div className="detail-copy"><span className="eyebrow">{label}</span><h1>{title}</h1><p>{description}</p><div className="detail-meta"><span>Kufy</span><span>·</span><span>Selecção de demonstração</span></div><div className="detail-actions"><button className="button button-primary" onClick={onPlay}><Play size={17} fill="currentColor" /> Reproduzir</button>{extra}</div></div>
+        <CoverArt cover={cover} image={coverImage} large />
+        <div className="detail-copy"><span className="eyebrow">{label}</span><h1>{title}</h1><p>{description}</p><div className="detail-meta"><span>Kufy</span><span>·</span><span>Selecção Kufy</span></div><div className="detail-actions"><button className="button button-primary" onClick={onPlay}><Play size={17} fill="currentColor" /> Reproduzir</button>{extra}</div></div>
       </div>
     );
   }
 
   function renderPlaylistDetail() {
     if (!currentPlaylist) return <EmptyState icon={<ListMusic size={28} />} title="Playlist não encontrada" description="Esta lista pode ter sido removida deste dispositivo." action="Voltar à biblioteca" onAction={() => goTo("library")} />;
-    return <div className="page-content detail-page">{renderDetailHeader(currentPlaylist.title, currentPlaylist.description, currentPlaylist.cover, currentPlaylist.isCustom ? "PLAYLIST PESSOAL" : "PLAYLIST KUFY", () => playlistTracks.length && playTrack(playlistTracks[0], playlistTracks), <button className="button button-glass" onClick={() => shareCurrentTrack()}><Share2 size={16} /> Partilhar</button>)}<div className="list-toolbar"><div className="list-toolbar-actions"><IconButton label={shuffle ? "Desactivar aleatório" : "Reprodução aleatória"} active={shuffle} onClick={() => setShuffle((value) => !value)}><Shuffle size={19} /></IconButton>{currentPlaylist.isCustom ? <IconButton label="Adicionar música" onClick={() => { setPendingTrack(null); setModal("add-to-playlist"); }}><Plus size={19} /></IconButton> : null}</div><span>{playlistTracks.length} músicas</span></div>{renderTrackRows(playlistTracks, playlistTracks)}</div>;
+    return <div className="page-content detail-page">{renderDetailHeader(currentPlaylist.title, currentPlaylist.description, currentPlaylist.cover, currentPlaylist.isCustom ? "PLAYLIST PESSOAL" : "PLAYLIST KUFY", () => playlistTracks.length && playTrack(playlistTracks[0], playlistTracks), <button className="button button-glass" onClick={() => shareCurrentTrack()}><Share2 size={16} /> Partilhar</button>, currentPlaylist.coverImage)}<div className="list-toolbar"><div className="list-toolbar-actions"><IconButton label={shuffle ? "Desactivar aleatório" : "Reprodução aleatória"} active={shuffle} onClick={() => setShuffle((value) => !value)}><Shuffle size={19} /></IconButton>{currentPlaylist.isCustom ? <IconButton label="Adicionar música" onClick={() => { setPendingTrack(null); setModal("add-to-playlist"); }}><Plus size={19} /></IconButton> : null}</div><span>{playlistTracks.length} músicas</span></div>{renderTrackRows(playlistTracks, playlistTracks)}</div>;
   }
 
   function renderLiked() {
@@ -558,11 +573,11 @@ export default function App() {
   function renderArtist() {
     const artist = artists.find((item) => item.name === selectedArtistName);
     const followed = followingIds.includes(artist?.id ?? "");
-    return <div className="page-content detail-page"><div className="artist-detail-hero"><CoverArt cover={artist?.cover ?? "art-04"} large rounded /><div className="detail-copy"><span className="eyebrow">ARTISTA</span><h1>{selectedArtistName}</h1><p>{artist?.monthlyListeners ?? "Descobre mais deste artista"}.</p><div className="detail-actions"><button className="button button-primary" onClick={() => artistTracks.length && playTrack(artistTracks[0], artistTracks)}><Play size={17} fill="currentColor" /> Reproduzir</button><button className={followed ? "button button-glass" : "button button-outline"} onClick={() => artist && setFollowingIds((current) => toggleId(current, artist.id))}>{followed ? <Check size={16} /> : <Plus size={16} />}{followed ? "A seguir" : "Seguir"}</button></div></div></div><section className="content-section"><SectionHeading title="Populares" subtitle="Faixas deste artista no catálogo de demonstração." />{renderTrackRows(artistTracks, artistTracks)}</section><section className="content-section"><SectionHeading title="Também podes gostar" />{renderArtistCardsFor(artists.filter((item) => item.name !== selectedArtistName).slice(0, 4))}</section></div>;
+    return <div className="page-content detail-page"><div className="artist-detail-hero"><CoverArt cover={artist?.cover ?? "art-04"} image={artist?.coverImage} large rounded /><div className="detail-copy"><span className="eyebrow">ARTISTA</span><h1>{selectedArtistName}</h1><p>{artist?.description ?? "Descobre mais deste artista"}.</p><div className="detail-actions"><button className="button button-primary" onClick={() => artistTracks.length && playTrack(artistTracks[0], artistTracks)}><Play size={17} fill="currentColor" /> Reproduzir</button><button className={followed ? "button button-glass" : "button button-outline"} onClick={() => artist && setFollowingIds((current) => toggleId(current, artist.id))}>{followed ? <Check size={16} /> : <Plus size={16} />}{followed ? "A seguir" : "Seguir"}</button></div></div></div><section className="content-section"><SectionHeading title="Populares" subtitle="Faixas disponíveis através do catálogo oficial." />{renderTrackRows(artistTracks, artistTracks)}</section><section className="content-section"><SectionHeading title="Também podes gostar" />{renderArtistCardsFor(artists.filter((item) => item.name !== selectedArtistName).slice(0, 4))}</section></div>;
   }
 
   function renderAlbum() {
-    return <div className="page-content detail-page">{renderDetailHeader(selectedAlbumName, "Uma colecção de faixas para ouvir do princípio ao fim.", albumTracks[0]?.cover ?? "art-03", "ÁLBUM", () => albumTracks.length && playTrack(albumTracks[0], albumTracks), <button className="button button-glass" onClick={() => { albumTracks.forEach((track) => setLikedIds((current) => current.includes(track.id) ? current : [track.id, ...current])); setNotice("Álbum guardado nos favoritos"); }}><Heart size={16} /> Guardar</button>)}<section className="content-section">{renderTrackRows(albumTracks, albumTracks)}</section></div>;
+    return <div className="page-content detail-page">{renderDetailHeader(selectedAlbumName, "Uma colecção de faixas para ouvir do princípio ao fim.", albumTracks[0]?.cover ?? "art-03", "ÁLBUM", () => albumTracks.length && playTrack(albumTracks[0], albumTracks), <button className="button button-glass" onClick={() => { albumTracks.forEach((track) => setLikedIds((current) => current.includes(track.id) ? current : [track.id, ...current])); setNotice("Álbum guardado nos favoritos"); }}><Heart size={16} /> Guardar</button>, albumTracks[0]?.coverImage)}<section className="content-section">{renderTrackRows(albumTracks, albumTracks)}</section></div>;
   }
 
   function renderMainContent() {
@@ -604,36 +619,36 @@ export default function App() {
       <main className="main-column">
         <header className="topbar">
           <div className="topbar-left"><IconButton label="Abrir navegação" className="mobile-menu" onClick={() => setShowMobileNav(true)}><Menu size={20} /></IconButton><div className="history-buttons"><IconButton label="Voltar" onClick={() => goTo("home")}><ArrowLeft size={18} /></IconButton><IconButton label="Avançar" onClick={() => goTo("search")}><ArrowRight size={18} /></IconButton></div><div className="global-search"><Search size={18} /><input ref={searchRef} aria-label="Pesquisar música, artista ou playlist" value={searchQuery} onFocus={() => setActiveView("search")} onChange={(event) => { setSearchQuery(event.target.value); setActiveView("search"); }} placeholder="O que queres ouvir?" /><span>Ctrl K</span>{searchQuery ? <IconButton label="Limpar pesquisa" onClick={() => setSearchQuery("")}><X size={15} /></IconButton> : null}</div></div>
-          <div className="topbar-actions"><button className="plus-pill" onClick={() => setModal("premium")}><Crown size={15} /> Kufy Plus</button>{displayName ? <button className="user-chip" onClick={() => setModal("account")}><span className="avatar">{displayName.slice(0, 1).toUpperCase()}</span><span>{displayName.split(" ")[0]}</span><ChevronDown size={14} /></button> : <button className="login-button" onClick={() => { setIsSignup(false); setModal("account"); }}><LogIn size={16} /> Iniciar sessão</button>}</div>
+          <div className="topbar-actions"><button className="plus-pill" onClick={() => setModal("premium")}><Headphones size={15} /> Kufy Plus</button>{displayName ? <button className="user-chip" onClick={() => setModal("account")}><span className="avatar">{displayName.slice(0, 1).toUpperCase()}</span><span>{displayName.split(" ")[0]}</span><ChevronDown size={14} /></button> : <button className="login-button" onClick={() => { setIsSignup(false); setModal("account"); }}><LogIn size={16} /> Iniciar sessão</button>}</div>
         </header>
         <div className="view-scroller" key={activeView}>{renderMainContent()}<footer className="app-footer"><span>© 2026 Kufy. Música para sentir.</span><span>Uma experiência de demonstração independente.</span><button onClick={() => setModal("settings")}>Privacidade e definições</button></footer></div>
       </main>
 
       <footer className="player-bar">
         <div className="now-playing">
-          {currentTrack ? <><button className="now-cover" onClick={() => openAlbum(currentTrack.album)}><CoverArt cover={currentTrack.cover} /></button><div className="now-copy"><button className="now-title" onClick={() => openAlbum(currentTrack.album)}>{currentTrack.title}</button><button className="now-artist" onClick={() => openArtist(currentTrack.artist)}>{currentTrack.artist}</button></div><IconButton label={likedIds.includes(currentTrack.id) ? "Remover dos favoritos" : "Adicionar aos favoritos"} active={likedIds.includes(currentTrack.id)} onClick={() => toggleLike(currentTrack)}><Heart size={17} fill={likedIds.includes(currentTrack.id) ? "currentColor" : "none"} /></IconButton></> : <><div className="now-cover now-placeholder"><Music2 size={22} /></div><div className="now-copy"><strong>Nenhuma faixa seleccionada</strong><span>Escolhe uma música para começar.</span></div></>}
+          {currentTrack ? <><button className="now-cover" onClick={() => setModal("spotify-player")}><CoverArt cover={currentTrack.cover} image={currentTrack.coverImage} /></button><div className="now-copy"><button className="now-title" onClick={() => setModal("spotify-player")}>{currentTrack.title}</button><button className="now-artist" onClick={() => openArtist(currentTrack.artist)}>{currentTrack.artist}</button></div><IconButton label={likedIds.includes(currentTrack.id) ? "Remover dos favoritos" : "Adicionar aos favoritos"} active={likedIds.includes(currentTrack.id)} onClick={() => toggleLike(currentTrack)}><Heart size={17} fill={likedIds.includes(currentTrack.id) ? "currentColor" : "none"} /></IconButton></> : <><div className="now-cover now-placeholder"><Music2 size={22} /></div><div className="now-copy"><strong>Nenhuma faixa seleccionada</strong><span>Escolhe uma música para começar.</span></div></>}
         </div>
         <div className="player-controls">
-          <div className="control-buttons"><IconButton label={shuffle ? "Desactivar aleatório" : "Activar aleatório"} active={shuffle} onClick={() => setShuffle((value) => !value)}><Shuffle size={17} /></IconButton><IconButton label="Faixa anterior" onClick={playPrevious}><SkipBack size={19} fill="currentColor" /></IconButton><button className="main-play-button" aria-label={isPlaying ? "Pausar" : "Reproduzir"} onClick={togglePlayback}>{isPlaying ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button><IconButton label="Faixa seguinte" onClick={playNext}><SkipForward size={19} fill="currentColor" /></IconButton><IconButton label={repeat ? "Desactivar repetição" : "Repetir faixa"} active={repeat} onClick={() => setRepeat((value) => !value)}><Repeat2 size={17} /></IconButton></div>
-          <div className="timeline"><span>{formatTime(currentTime)}</span><input aria-label="Posição da música" type="range" min="0" max={Math.max(duration, 1)} value={Math.min(currentTime, Math.max(duration, 1))} onChange={(event) => { const value = Number(event.target.value); setCurrentTime(value); if (audioRef.current) audioRef.current.currentTime = value; }} style={{ "--range-progress": (duration ? (currentTime / duration) * 100 : 0) + "%" } as CSSProperties} /><span>{formatTime(duration || currentTrack?.duration || 0)}</span></div>
+          <div className="control-buttons"><IconButton label={shuffle ? "Desactivar aleatório" : "Activar aleatório"} active={shuffle} onClick={() => setShuffle((value) => !value)}><Shuffle size={17} /></IconButton><IconButton label="Faixa anterior" onClick={playPrevious}><SkipBack size={19} fill="currentColor" /></IconButton><button className="main-play-button" aria-label={isPlaying ? "Pausar no Spotify" : "Abrir leitor Spotify"} onClick={togglePlayback}>{isPlaying ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button><IconButton label="Faixa seguinte" onClick={playNext}><SkipForward size={19} fill="currentColor" /></IconButton><IconButton label={repeat ? "Desactivar repetição" : "Repetir faixa"} active={repeat} onClick={() => setRepeat((value) => !value)}><Repeat2 size={17} /></IconButton></div>
+          <div className="timeline"><span>{formatTime(currentTime)}</span><input aria-label="Posição da música" type="range" min="0" max={Math.max(duration, 1)} value={Math.min(currentTime, Math.max(duration, 1))} disabled={!spotifyController} onChange={(event) => { const value = Number(event.target.value); setCurrentTime(value); if (spotifyController) spotifyController.seek(value); }} style={{ "--range-progress": (duration ? (currentTime / duration) * 100 : 0) + "%" } as CSSProperties} /><span>{formatTime(duration || currentTrack?.duration || 0)}</span></div>
         </div>
-        <div className="player-extras"><IconButton label="Letra" onClick={() => setModal("lyrics")}><Mic2 size={17} /></IconButton><IconButton label="Fila de reprodução" onClick={() => setModal("queue")}><ListMusic size={18} /></IconButton><IconButton label="Dispositivo de reprodução" onClick={() => setModal("devices")}><MonitorSpeaker size={17} /></IconButton><div className="volume-control"><IconButton label={volume === 0 ? "Activar som" : "Silenciar"} onClick={() => setVolume((value) => value === 0 ? 0.75 : 0)}>{volume === 0 ? <VolumeX size={17} /> : volume < 0.35 ? <Volume1 size={17} /> : <Volume2 size={17} />}</IconButton><input type="range" aria-label="Volume" min="0" max="1" step="0.01" value={volume} onChange={(event) => setVolume(Number(event.target.value))} style={{ "--range-progress": (volume * 100) + "%" } as CSSProperties} /></div><IconButton label="Definições de reprodução" onClick={() => setModal("settings")}><Settings2 size={17} /></IconButton></div>
-        <audio ref={audioRef} src={currentTrack?.audioUrl} preload="metadata" onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} onLoadedMetadata={(event) => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : currentTrack?.duration ?? 0)} onEnded={playNext} onError={() => { if (currentTrack) { setIsPlaying(false); setNotice("O áudio de demonstração não carregou. O resto da interface continua disponível."); } }} />
+        <div className="player-extras"><IconButton label="Leitor oficial" onClick={() => setModal("spotify-player")}><Headphones size={17} /></IconButton><IconButton label="Fila de reprodução" onClick={() => setModal("queue")}><ListMusic size={18} /></IconButton><IconButton label="Dispositivo de reprodução" onClick={() => setModal("devices")}><MonitorSpeaker size={17} /></IconButton><IconButton label="Definições" onClick={() => setModal("settings")}><Settings2 size={17} /></IconButton></div>
       </footer>
 
       {showMobileNav ? <button className="mobile-backdrop" aria-label="Fechar navegação" onClick={() => setShowMobileNav(false)} /> : null}
       {notice ? <div className="toast"><Check size={16} />{notice}</div> : null}
 
-      {modal ? <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setModal(null); }}><section className="modal-panel" role="dialog" aria-modal="true" aria-label="Painel Kufy">
-        <div className="modal-head"><div className="modal-brand"><span className="brand-symbol">K</span><span>{modal === "premium" ? "Kufy Plus" : modal === "account" ? "A tua conta" : modal === "settings" ? "Definições" : modal === "queue" ? "Fila de reprodução" : modal === "lyrics" ? "Letra da música" : modal === "devices" ? "Dispositivos" : modal === "add-to-playlist" ? "Adicionar à playlist" : "Nova playlist"}</span></div><IconButton label="Fechar" onClick={() => setModal(null)}><X size={19} /></IconButton></div>
+      {modal ? <div className={["modal-backdrop", modal === "spotify-player" ? "spotify-modal-backdrop" : ""].filter(Boolean).join(" ")} onMouseDown={(event) => { if (event.target === event.currentTarget) closeModal(); }}><section className={["modal-panel", modal === "spotify-player" ? "spotify-modal-panel" : ""].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-label="Painel Kufy">
+        <div className="modal-head"><div className="modal-brand"><span className="brand-symbol">K</span><span>{modal === "spotify-player" ? "Leitor oficial" : modal === "premium" ? "Kufy Plus" : modal === "account" ? "A tua conta" : modal === "settings" ? "Definições" : modal === "queue" ? "Fila de reprodução" : modal === "lyrics" ? "Letra da música" : modal === "devices" ? "Dispositivos" : modal === "add-to-playlist" ? "Adicionar à playlist" : "Nova playlist"}</span></div><IconButton label="Fechar" onClick={closeModal}><X size={19} /></IconButton></div>
+        {modal === "spotify-player" && currentTrack ? <div className="modal-body spotify-dock-body"><div className="spotify-track-heading"><CoverArt cover={currentTrack.cover} image={currentTrack.coverImage} /><div><span className="eyebrow">{currentTrack.opensCollection ? "CATÁLOGO DO SPOTIFY" : "A TOCAR NO KUFY"}</span><h2>{currentTrack.title}</h2><p>{currentTrack.artist}</p></div></div><SpotifyPlayer key={currentTrack.id} track={currentTrack} onController={handleSpotifyController} onPlaybackState={handleSpotifyPlaybackState} onError={handleSpotifyError} /><div className="spotify-modal-actions"><button className="button button-outline" onClick={() => setModal("queue")}><ListMusic size={16} /> Fila</button><button className="button button-primary" onClick={() => spotifyController ? (isPlaying ? spotifyController.pause() : spotifyController.play()) : setNotice("O leitor está a iniciar. Usa os controlos do Spotify quando aparecerem.")}>{isPlaying ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}{isPlaying ? "Pausar" : "Reproduzir"}</button></div></div> : null}
         {modal === "create-playlist" ? <form className="modal-body" onSubmit={createPlaylist}><div className="modal-illustration"><ListMusic size={28} /></div><h2>Cria a tua playlist</h2><p>Dá um nome à tua próxima selecção. Fica guardada neste dispositivo.</p><label className="field-label" htmlFor="playlist-name">Nome da playlist</label><input id="playlist-name" className="text-field" value={playlistName} onChange={(event) => setPlaylistName(event.target.value)} placeholder="Ex.: Sons da madrugada" maxLength={48} autoFocus required /><div className="modal-actions"><button type="button" className="button button-glass" onClick={() => setModal(null)}>Cancelar</button><button type="submit" className="button button-primary">Criar playlist</button></div>{pendingTrack ? <small className="modal-note">A faixa “{pendingTrack.title}” será adicionada à nova playlist.</small> : null}</form> : null}
-        {modal === "add-to-playlist" ? <div className="modal-body"><h2>Guardar música</h2><p>{pendingTrack ? "Escolhe onde queres guardar “" + pendingTrack.title + "”." : "Escolhe uma playlist para adicionar músicas ou cria uma nova."}</p><div className="modal-list">{customPlaylists.map((playlist) => <button key={playlist.id} className="modal-list-item" onClick={() => pendingTrack ? addTrackToPlaylist(playlist.id) : (setSelectedPlaylistId(playlist.id), setModal(null), setActiveView("playlist"))}><CoverArt cover={playlist.cover} /><span><strong>{playlist.title}</strong><small>{playlist.trackIds.length} músicas</small></span><Plus size={17} /></button>)}</div><button className="button button-outline button-full" onClick={() => openCreatePlaylist(pendingTrack ?? undefined)}><Plus size={17} /> Criar nova playlist</button>{customPlaylists.length === 0 ? <p className="modal-note">Ainda não criaste playlists pessoais.</p> : null}</div> : null}
+        {modal === "add-to-playlist" ? <div className="modal-body"><h2>Guardar música</h2><p>{pendingTrack ? "Escolhe onde queres guardar “" + pendingTrack.title + "”." : "Escolhe uma playlist para adicionar músicas ou cria uma nova."}</p><div className="modal-list">{customPlaylists.map((playlist) => <button key={playlist.id} className="modal-list-item" onClick={() => pendingTrack ? addTrackToPlaylist(playlist.id) : (setSelectedPlaylistId(playlist.id), setModal(null), setActiveView("playlist"))}><CoverArt cover={playlist.cover} image={playlist.coverImage} /><span><strong>{playlist.title}</strong><small>{playlist.trackIds.length} músicas</small></span><Plus size={17} /></button>)}</div><button className="button button-outline button-full" onClick={() => openCreatePlaylist(pendingTrack ?? undefined)}><Plus size={17} /> Criar nova playlist</button>{customPlaylists.length === 0 ? <p className="modal-note">Ainda não criaste playlists pessoais.</p> : null}</div> : null}
         {modal === "account" ? <form className="modal-body" onSubmit={submitAccount}><div className="modal-illustration"><UserRound size={28} /></div><h2>{displayName ? "Estás a ouvir como " + displayName : isSignup ? "Cria o teu espaço" : "Entra no teu universo"}</h2><p>Este protótipo guarda apenas um nome local. Ainda não existe autenticação real ou conta online.</p>{displayName ? <><div className="account-status"><span className="avatar">{displayName.slice(0, 1).toUpperCase()}</span><div><strong>{displayName}</strong><small>Perfil local de demonstração</small></div></div><button type="button" className="button button-outline button-full" onClick={() => { setDisplayName(null); setModal(null); setNotice("Sessão local terminada"); }}>Terminar sessão</button></> : <><label className="field-label" htmlFor="account-email">E-mail</label><input id="account-email" className="text-field" type="email" value={accountEmail} onChange={(event) => setAccountEmail(event.target.value)} placeholder="nome@exemplo.com" required /><button className="button button-primary button-full" type="submit">{isSignup ? "Criar perfil de demonstração" : "Continuar"}</button><button type="button" className="text-action centered-action" onClick={() => setIsSignup((value) => !value)}>{isSignup ? "Já tens perfil? Entrar" : "Ainda não tens conta? Criar perfil"}</button></>}</form> : null}
-        {modal === "premium" ? <div className="modal-body premium-body"><div className="premium-orb"><Crown size={31} /></div><span className="eyebrow">KUFY PLUS</span><h2>Ouve sem limites.</h2><p>A experiência Plus está aqui como conceito de produto. Pagamentos, subscrições e benefícios reais ainda não estão ligados.</p><div className="premium-features"><span><Check size={16} /> Reprodução sem interrupções de interface</span><span><Check size={16} /> Biblioteca personalizada</span><span><Check size={16} /> Controlo de reprodução</span><span className="muted-feature"><X size={16} /> Downloads offline reais, ainda não disponíveis</span></div><button className="button button-primary button-full" onClick={() => { setModal(null); setNotice("O fluxo comercial será ligado numa fase futura"); }}>Percebi</button><small className="modal-note">Sem cobrança. Nenhuma subscrição foi criada.</small></div> : null}
-        {modal === "settings" ? <div className="modal-body"><h2>Personaliza a tua experiência</h2><p>Preferências guardadas apenas nesta sessão.</p><div className="settings-row"><span><strong>Nível de saída</strong><small>Ajuste ligeiro do volume no leitor de demonstração</small></span><button className={normalization ? "toggle-switch toggle-on" : "toggle-switch"} onClick={() => setNormalization((value) => !value)} aria-label="Alternar normalização"><span /></button></div><div className="settings-row"><span><strong>Conteúdo explícito</strong><small>Permitir faixas assinaladas como explícitas</small></span><button className={explicitContent ? "toggle-switch toggle-on" : "toggle-switch"} onClick={() => setExplicitContent((value) => !value)} aria-label="Alternar conteúdo explícito"><span /></button></div><div className="settings-row"><span><strong>Atalhos de teclado</strong><small>Espaço reproduz/pausa, Ctrl K pesquisa, setas saltam 5 segundos.</small></span><Activity size={20} /></div><button className="button button-outline button-full" onClick={() => setModal(null)}>Fechar definições</button></div> : null}
-        {modal === "queue" ? <div className="modal-body"><h2>A seguir</h2><p>{queueTracks.length} faixas na fila actual.</p>{currentTrack ? <div className="queue-now"><CoverArt cover={currentTrack.cover} /><div><small>A TOCAR AGORA</small><strong>{currentTrack.title}</strong><span>{currentTrack.artist}</span></div></div> : null}<div className="modal-list queue-list">{queueTracks.filter((track) => track.id !== currentTrack?.id).map((track) => <button key={track.id} className="modal-list-item" onClick={() => playTrack(track, queueTracks)}><CoverArt cover={track.cover} /><span><strong>{track.title}</strong><small>{track.artist}</small></span><span className="track-duration">{formatTime(track.duration)}</span></button>)}</div><button className="button button-outline button-full" onClick={() => setQueueIds(tracks.map((track) => track.id))}>Repor fila de demonstração</button></div> : null}
-        {modal === "lyrics" ? <div className="modal-body lyrics-body">{currentTrack ? <><CoverArt cover={currentTrack.cover} large /><span className="eyebrow">LETRA</span><h2>{currentTrack.title}</h2><p>{currentTrack.artist}</p><div className="lyrics-unavailable"><Mic2 size={25} /><strong>Letra não disponível</strong><span>As faixas actuais são áudio de demonstração e não incluem letras licenciadas.</span></div></> : <EmptyState icon={<Mic2 size={27} />} title="Escolhe uma faixa" description="A letra aparece aqui quando estiver disponível." />}</div> : null}
-        {modal === "devices" ? <div className="modal-body"><h2>Onde estás a ouvir?</h2><p>O áudio desta versão toca no navegador actual.</p><div className="device-current"><span><MonitorSpeaker size={22} /></span><div><strong>Este dispositivo</strong><small>Reprodução neste navegador</small></div><Check size={17} /></div><div className="device-info"><Headphones size={18} /><span>Colunas inteligentes, aplicações móveis e ligação entre dispositivos ainda precisam de serviços adicionais.</span></div></div> : null}
+        {modal === "premium" ? <div className="modal-body premium-body"><div className="premium-orb"><Headphones size={31} /></div><span className="eyebrow">KUFY PLUS</span><h2>Ouve sem limites.</h2><p>Kufy Plus é uma proposta visual de subscrição. Não existe cobrança nem subscrição activa nesta versão.</p><div className="premium-features"><span><Check size={16} /> Biblioteca e playlists personalizadas</span><span><Check size={16} /> Capas e páginas de artista oficiais</span><span><Check size={16} /> Reprodução através do leitor oficial</span><span className="muted-feature"><X size={16} /> Downloads offline reais, ainda não disponíveis</span></div><button className="button button-primary button-full" onClick={() => { setModal(null); setNotice("O fluxo comercial será ligado numa fase futura"); }}>Percebi</button><small className="modal-note">Sem cobrança. Nenhuma subscrição foi criada.</small></div> : null}
+        {modal === "settings" ? <div className="modal-body"><h2>Personaliza a tua experiência</h2><p>Preferências guardadas apenas nesta sessão.</p><div className="settings-row"><span><strong>Permitir conteúdo explícito</strong><small>Incluir as faixas sinalizadas no catálogo oficial</small></span><button className={explicitContent ? "toggle-switch toggle-on" : "toggle-switch"} onClick={() => setExplicitContent((value) => !value)} aria-label="Alternar conteúdo explícito"><span /></button></div><div className="settings-row"><span><strong>Atalhos de teclado</strong><small>Espaço reproduz/pausa, Ctrl K pesquisa, setas saltam 5 segundos.</small></span><Keyboard size={20} /></div><button className="button button-outline button-full" onClick={() => setModal(null)}>Fechar definições</button></div> : null}
+        {modal === "queue" ? <div className="modal-body"><h2>A seguir</h2><p>{queueTracks.length} faixas na fila actual.</p>{currentTrack ? <div className="queue-now"><CoverArt cover={currentTrack.cover} image={currentTrack.coverImage} /><div><small>A TOCAR AGORA</small><strong>{currentTrack.title}</strong><span>{currentTrack.artist}</span></div></div> : null}<div className="modal-list queue-list">{queueTracks.filter((track) => track.id !== currentTrack?.id).map((track) => <button key={track.id} className="modal-list-item" onClick={() => playTrack(track, queueTracks)}><CoverArt cover={track.cover} image={track.coverImage} /><span><strong>{track.title}</strong><small>{track.artist}</small></span><span className="track-duration">{formatTime(track.duration)}</span></button>)}</div><button className="button button-outline button-full" onClick={() => setQueueIds(tracks.map((track) => track.id))}>Repor fila de demonstração</button></div> : null}
+        {modal === "lyrics" ? <div className="modal-body lyrics-body">{currentTrack ? <><CoverArt cover={currentTrack.cover} large /><span className="eyebrow">LETRA</span><h2>{currentTrack.title}</h2><p>{currentTrack.artist}</p><div className="lyrics-unavailable"><Mic2 size={25} /><strong>Letra não disponível</strong><span>As letras dependem da disponibilidade e das permissões do detentor dos direitos.</span></div></> : <EmptyState icon={<Mic2 size={27} />} title="Escolhe uma faixa" description="A letra aparece aqui quando estiver disponível." />}</div> : null}
+        {modal === "devices" ? <div className="modal-body"><h2>Onde estás a ouvir?</h2><p>A reprodução é fornecida pelo leitor oficial do Spotify no navegador actual.</p><div className="device-current"><span><MonitorSpeaker size={22} /></span><div><strong>Este dispositivo</strong><small>Reprodução neste navegador</small></div><Check size={17} /></div><div className="device-info"><Headphones size={18} /><span>Colunas inteligentes, aplicações móveis e ligação entre dispositivos ainda precisam de serviços adicionais.</span></div></div> : null}
       </section></div> : null}
     </div>
   );

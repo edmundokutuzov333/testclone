@@ -5,8 +5,15 @@ import { formatTime, getTracks, normalizeText, searchTracks, toggleId } from "./
 describe("music domain", () => {
   it("normalizes accents and case for search", () => {
     expect(normalizeText("Eletrónica")).toBe("eletronica");
-    expect(searchTracks(tracks, "MAPUTO")).toHaveLength(1);
-    expect(searchTracks(tracks, "mila")).toHaveLength(3);
+    expect(searchTracks(tracks, "MAQUINA")).toHaveLength(1);
+    expect(searchTracks(tracks, "travis")).toHaveLength(3);
+  });
+
+  it("uses official Spotify URIs for the catalogue", () => {
+    expect(tracks.every((track) => track.spotifyUri.startsWith("spotify:"))).toBe(true);
+    expect(tracks.some((track) => track.artist.includes("Matuê"))).toBe(true);
+    expect(tracks.some((track) => track.artist.includes("Laylizzy"))).toBe(true);
+    expect(tracks.some((track) => track.artist.includes("Dygo Boy"))).toBe(true);
   });
 
   it("formats playback time safely", () => {
