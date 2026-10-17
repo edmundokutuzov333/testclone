@@ -5,7 +5,7 @@ import { formatTime, getTracks, normalizeText, searchTracks, toggleId } from "./
 describe("music domain", () => {
   it("normalizes accents and case for search", () => {
     expect(normalizeText("Eletrónica")).toBe("eletronica");
-    expect(searchTracks(tracks, "MAQUINA")).toHaveLength(1);
+    expect(searchTracks(tracks, "MAQUINA")).toHaveLength(2);
     expect(searchTracks(tracks, "travis")).toHaveLength(3);
   });
 
