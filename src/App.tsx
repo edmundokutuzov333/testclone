@@ -140,18 +140,18 @@ export default function App() {
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !currentTrack) return;
+    if (!audio) return;
     audio.volume = Math.min(1, volume * (normalization ? 1 : 0.82));
-    if (isPlaying) {
-      const playback = audio.play();
-      if (playback && typeof playback.catch === "function") {
-        playback.catch(() => {
-          setIsPlaying(false);
-          setNotice("A faixa de demonstração não está acessível. Verifica a ligação e tenta novamente.");
-        });
-      }
-    } else {
+    if (!currentTrack || !isPlaying) {
       audio.pause();
+      return;
+    }
+    const playback = audio.play();
+    if (playback && typeof playback.catch === "function") {
+      playback.catch(() => {
+        setIsPlaying(false);
+        setNotice("A faixa de demonstração não está acessível. Verifica a ligação e tenta novamente.");
+      });
     }
   }, [currentTrack, isPlaying, volume, normalization]);
 
